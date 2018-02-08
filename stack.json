@@ -1,0 +1,9 @@
+{
+  "UserPoolClientId": "1ttl3ir4v456e9ari3eqgbjsge",
+  "UserPoolId": "eu-west-1_PtJ4NoVML",
+  "IdentityPoolId": "eu-west-1:ec035e01-6226-4cb2-88f1-9cf348916d72",
+  "AppLambdaFunctionQualifiedArn": "arn:aws:lambda:eu-west-1:834819762693:function:MagicMirror-dev-app:11",
+  "UserPoolArn": "arn:aws:cognito-idp:eu-west-1:834819762693:userpool/eu-west-1_PtJ4NoVML",
+  "ServiceEndpoint": "https://edhvqd74g0.execute-api.eu-west-1.amazonaws.com/dev",
+  "ServerlessDeploymentBucketName": "magicmirror-dev-serverlessdeploymentbucket-1jycwj70k2j8p"
+}

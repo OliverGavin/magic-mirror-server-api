@@ -1,0 +1,17 @@
+{
+  "name": "lambda_api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "serverless-python-requirements": "^3.2.2",
+    "serverless-stack-output": "^0.2.3",
+    "serverless-wsgi": "^1.4.4"
+  }
+}
