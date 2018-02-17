@@ -5,15 +5,25 @@ plugins:
   - serverless-wsgi
   - serverless-stack-output
 
+package:
+  exclude:
+    - node_modules/**
+    - package.json
+    - package-lock.json
+    - stack.json
+    - tests/**
+    - requirements.txt
+    - run.py
+
 custom:
   wsgi:
-    app: app.app
+    app: app.app.app
     packRequirements: false
   pythonRequirements:
     dockerizePip: 'non-linux'
   output:
     # handler: out.handler  # function handler (data, serverless, options) {console.log('Received Stack Output', data)}} module.exports = { handler }}
-    file: stack.json
+    file: stack.toml
 
 provider:
   name: aws
@@ -21,6 +31,48 @@ provider:
   stage: dev
   region: eu-west-1
   variableSyntax: "\\${{([ ~:a-zA-Z0-9._\\'\",\\-\\/\\(\\)]+?)}}"
+  environment:
+    UserPoolId:
+      Ref: UserPool
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+       - dynamodb:Query
+       - dynamodb:Scan
+       - dynamodb:GetItem
+       - dynamodb:BatchGetItem
+       - dynamodb:PutItem
+       - dynamodb:UpdateItem
+       - dynamodb:DeleteItem
+      Resource:
+        - Fn::GetAtt:
+          - DeviceGroup
+          - Arn
+        - Fn::GetAtt:
+          - DeviceGroupUsers
+          - Arn
+        - Fn::Join:
+          - ""
+          - - Fn::GetAtt:
+              - DeviceGroupUsers
+              - Arn
+            - "/index/*"
+
+
+  # Fn::Join:
+  #   - ""
+  #   - - "arn:aws:dynamodb:"
+  #     - Ref: AWS::Region
+  #     - ":"
+  #     - Ref: AWS::AccountId
+  #     - ":table/"
+  #     - Ref: UserDynamoDBTable
+
+# DeviceGroupUsers
+# Properties
+# GlobalSecondaryIndexes
+# IndexName
+# useridGSI
 
 functions:
   app:
@@ -29,8 +81,21 @@ functions:
       # - http: ANY /
       # - http: 'ANY {proxy+}'
       - http:
-          path: /
+          path: '{proxy+}'
           method: ANY
+          cors:
+            origins: '*'
+            headers:
+              - Content-Type
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Methods
+              - Access-Control-Allow-Headers
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - X-Amz-Date
+            allowCredentials: false
           authorizer:
             identitySource: "method.request.header.Authorization"
             arn: arn:aws:cognito-idp:eu-west-1:834819762693:userpool/eu-west-1_PtJ4NoVML  # TODO when fix available!!! or multi stack :(
@@ -43,9 +108,45 @@ functions:
               #   - UserPool
               #   - Arn
             type: "COGNITO_USER_POOLS"
+      - http:
+          path: '/'
+          method: ANY
+          cors:
+            origins: '*'
+            headers:
+              - Content-Type
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Methods
+              - Access-Control-Allow-Headers
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - X-Amz-Date
+            allowCredentials: false
+          authorizer:
+            identitySource: "method.request.header.Authorization"
+            arn: arn:aws:cognito-idp:eu-west-1:834819762693:userpool/eu-west-1_PtJ4NoVML
+            type: "COGNITO_USER_POOLS"
 
 resources:
   Resources:
+
+    # LoggingPermissionPolicy:
+    #   Type: AWS::IAM::Policy
+    #   Properties:
+    #     PolicyName: LoggingPermission
+    #     PolicyDocument:
+    #       Version: 2012-10-17
+    #       Statement:
+    #         - Effect: Allow
+    #           Action:
+    #             - logs:CreateLogGroup
+    #             - logs:CreateLogStream
+    #             - logs:PutLogEvents
+    #           Resource: arn:aws:logs:${self:provider.region}:${accountId}:log-group:/aws/lambda/*:*:*
+    #     Roles:
+    #       - Ref: MyRole
 
 
     # # Create a IAM role for accessing SES to send confirmation emails
@@ -245,11 +346,55 @@ resources:
       Properties:
         TableName: ${{self:service}}-${{self:provider.stage}}-users
         AttributeDefinitions:
-          - AttributeName: userid
+          - AttributeName: userId
             AttributeType: S
         KeySchema:
-          - AttributeName: userid
+          - AttributeName: userId
             KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    DeviceGroup:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${{self:service}}-${{self:provider.stage}}-device-group
+        AttributeDefinitions:
+          - AttributeName: groupId
+            AttributeType: S
+          # groupName
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    DeviceGroupUsers:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${{self:service}}-${{self:provider.stage}}-device-group-users
+        AttributeDefinitions:
+          - AttributeName: groupId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          # groupOwner
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+          - AttributeName: userId
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+        - IndexName: useridGSI
+          Projection:
+            ProjectionType: ALL
+          KeySchema:
+            - AttributeName: userId
+              KeyType: "HASH"
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1

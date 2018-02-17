@@ -4,14 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "env $(cat stack.toml | sed 's/ //g' | xargs) sls wsgi serve"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "serverless-python-requirements": "^3.2.2",
+    "serverless": "^1.26.0",
+    "serverless-python-requirements": "^3.3.0",
     "serverless-stack-output": "^0.2.3",
-    "serverless-wsgi": "^1.4.4"
+    "serverless-wsgi": "^1.4.6"
   }
 }
