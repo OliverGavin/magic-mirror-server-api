@@ -1,16 +1,20 @@
 import boto3
+import base64
 import operator
 import os
 import uuid
+import logging
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 
 cognito_idp = boto3.client('cognito-idp')
 dynamodb = boto3.resource('dynamodb')
+rekognition = boto3.client('rekognition')
 
-device_group_table = dynamodb.Table('MagicMirror-dev-device-group')
-device_group_users_table = dynamodb.Table('MagicMirror-dev-device-group-users')
+device_group_table = dynamodb.Table(os.environ['DEVICE_GROUP_TABLE'])
+device_group_users_table = dynamodb.Table(os.environ['DEVICE_GROUP_USERS_TABLE'])
+device_group_user_faces_table = dynamodb.Table(os.environ['DEVICE_GROUP_USER_FACES_TABLE'])
 
 
 class DeviceGroup:
@@ -41,6 +45,10 @@ class UserNotInDeviceGroupException(Exception):
 
 
 class UserAlreadyInDeviceGroupException(Exception):
+    pass
+
+
+class FaceNotInDeviceGroupException(Exception):
     pass
 
 
@@ -136,6 +144,8 @@ def delete_device_group(group_id):
             raise DeviceGroupNotFoundException(f"DeviceGroup(id='{group_id}') not found.") from e
         else:
             raise
+
+    delete_face_collection(group_id)
 
 
 def update_device_group(device_group):
@@ -242,6 +252,8 @@ def create_device_group(name):
             raise DeviceGroupAlreadyExistsException(f"DeviceGroup(id='{item['groupId']}') already exists.") from e
         else:
             raise
+
+    create_face_collection(item['groupId'])
 
     return DeviceGroup(item['groupId'], item['groupName'])
 
@@ -403,3 +415,80 @@ def add_user_to_device_group(user_id, group_id, owner=False):
             raise
 
     return DeviceGroupUser(user_id, group_id, owner)
+
+
+def register_user_face_in_device_group(user_id, group_id, faces):
+    face_ids = []
+
+    for face in faces:
+        response = rekognition.index_faces(
+            CollectionId=group_id,
+            Image={
+                'Bytes': base64.b64decode(face.encode('utf-8'))
+            },
+            ExternalImageId=user_id,
+            DetectionAttributes=[
+                'DEFAULT'  # |'ALL',
+            ]
+        )
+
+        face_id = response['FaceRecords'][0]['Face']['FaceId']
+        face_ids.append(face_id)
+
+        logging.error('register:')
+        logging.error(response)
+
+    with device_group_user_faces_table.batch_writer() as batch:
+        for face_id in face_ids:
+            batch.put_item(
+                Item={
+                    'groupId': group_id,
+                    'faceId': face_id,
+                    'userId': user_id
+                }
+            )
+
+
+def search_user_face_in_device_group(group_id, face):
+    response = rekognition.search_faces_by_image(
+        CollectionId=group_id,
+        FaceMatchThreshold=95,
+        Image={
+            'Bytes': base64.b64decode(face.encode('utf-8'))
+        },
+        MaxFaces=5,
+    )
+
+    # logging.error('search:')
+    # logging.error(response)
+
+    # best_confidence = response['SearchedFaceConfidence']  # even if not chosen..
+
+    face_id = response['FaceMatches'][0]['Face']['FaceId']
+
+    response = device_group_user_faces_table.get_item(
+        Key={
+            'groupId': group_id,
+            'faceId': face_id
+        }
+    )
+    if 'Item' not in response:
+        raise FaceNotInDeviceGroupException(f"DeviceGroup(id='{group_id}') does not recognise this face.")
+    user_id = response['Item']['userId']
+
+    # logging.error('user_id:')
+    # logging.error(user_id)
+
+
+def remove_user_face_from_device_group(user_id, group_id):
+    # query DDB GSI for userId to get faceId, delete from collection/DDB
+    pass
+
+
+def create_face_collection(group_id):
+    rekognition.create_collection(CollectionId=group_id)
+
+
+def delete_face_collection(group_id):
+    # DDB
+    rekognition.delete_collection(CollectionId=group_id)

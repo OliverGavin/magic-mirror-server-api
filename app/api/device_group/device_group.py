@@ -17,7 +17,9 @@ from app.managers.device_group import (
     delete_user_in_device_group,
     update_user_in_device_group,
     get_users_in_device_group,
-    add_user_to_device_group
+    add_user_to_device_group,
+    register_user_face_in_device_group,
+    remove_user_face_from_device_group
 )
 
 
@@ -130,14 +132,14 @@ class DeviceGroupUserApi(Resource):
     def get(self, group_id, user_id):
         # TODO check permission
         cognito_user_id = get_cognito_user_id()
-        if user_id != get_cognito_user_id() and not is_owner(cognito_user_id):
+        if user_id != cognito_user_id and not is_owner(cognito_user_id):
             abort(403, message='User does not have permission to make changes to that user.')
         user = get_user_in_device_group(user_id, group_id)
         return user
 
     def delete(self, group_id, user_id):
         cognito_user_id = get_cognito_user_id()
-        if user_id != get_cognito_user_id() and not is_owner(cognito_user_id):
+        if user_id != cognito_user_id and not is_owner(cognito_user_id):
             abort(403, message='User does not have permission to make changes to that user.')
         delete_user_in_device_group(user_id, group_id)
         return '', 204
@@ -179,3 +181,27 @@ class DeviceGroupUserListApi(Resource):
 
 api.add_resource(DeviceGroupUserApi, '/groups/<group_id>/users/<user_id>')
 api.add_resource(DeviceGroupUserListApi, '/groups/<group_id>/users')
+
+
+class DeviceGroupUserFacesApi(Resource):
+
+    def post(self, group_id, user_id):
+        # TODO check if in group??
+        # if user_id != get_cognito_user_id():
+        #     abort(403, message='User does not have permission to make changes to that user.')
+
+        data = request.get_json()
+        faces = data['faces']
+        register_user_face_in_device_group(user_id, group_id, faces)
+        return '', 201
+
+    def delete(self, group_id, user_id):
+        cognito_user_id = get_cognito_user_id()
+        if user_id != cognito_user_id and not is_owner(cognito_user_id):
+            abort(403, message='User does not have permission to make changes to that user.')
+
+        remove_user_face_from_device_group(user_id, group_id)
+        return '', 204
+
+
+api.add_resource(DeviceGroupUserFacesApi, '/groups/<group_id>/users/<user_id>/faces')

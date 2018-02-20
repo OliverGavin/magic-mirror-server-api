@@ -5,13 +5,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "env $(cat stack.toml | sed 's/ //g' | xargs) sls wsgi serve"
+    "serve": "env $(cat .env | xargs) sls wsgi serve -p 5001"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "serverless": "^1.26.0",
+    "serverless-export-env": "github:arabold/serverless-export-env",
     "serverless-python-requirements": "^3.3.0",
     "serverless-stack-output": "^0.2.3",
     "serverless-wsgi": "^1.4.6"

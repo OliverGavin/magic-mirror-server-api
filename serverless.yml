@@ -4,6 +4,7 @@ plugins:
   - serverless-python-requirements
   - serverless-wsgi
   - serverless-stack-output
+  - serverless-export-env
 
 package:
   exclude:
@@ -16,6 +17,16 @@ package:
     - run.py
 
 custom:
+  variables:
+    dynamodb:
+      usersTableName:
+       ${{self:service}}-${{self:provider.stage}}-users
+      deviceGroupTableName:
+       ${{self:service}}-${{self:provider.stage}}-device-group
+      deviceGroupUsersTableName:
+       ${{self:service}}-${{self:provider.stage}}-device-group-users
+      deviceGroupUserFacesTableName:
+       ${{self:service}}-${{self:provider.stage}}-device-group-user-faces
   wsgi:
     app: app.app.app
     packRequirements: false
@@ -23,7 +34,7 @@ custom:
     dockerizePip: 'non-linux'
   output:
     # handler: out.handler  # function handler (data, serverless, options) {console.log('Received Stack Output', data)}} module.exports = { handler }}
-    file: stack.toml
+    file: stack.json
 
 provider:
   name: aws
@@ -32,8 +43,16 @@ provider:
   region: eu-west-1
   variableSyntax: "\\${{([ ~:a-zA-Z0-9._\\'\",\\-\\/\\(\\)]+?)}}"
   environment:
-    UserPoolId:
+    USER_POOL_ID:
       Ref: UserPool
+    USERS_TABLE:
+      ${{self:custom.variables.dynamodb.usersTableName}}
+    DEVICE_GROUP_TABLE:
+      ${{self:custom.variables.dynamodb.deviceGroupTableName}}
+    DEVICE_GROUP_USERS_TABLE:
+      ${{self:custom.variables.dynamodb.deviceGroupUsersTableName}}
+    DEVICE_GROUP_USER_FACES_TABLE:
+      ${{self:custom.variables.dynamodb.deviceGroupUserFacesTableName}}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -46,17 +65,20 @@ provider:
        - dynamodb:DeleteItem
       Resource:
         - Fn::GetAtt:
-          - DeviceGroup
+          - DeviceGroupTable
           - Arn
         - Fn::GetAtt:
-          - DeviceGroupUsers
+          - DeviceGroupUsersTable
           - Arn
         - Fn::Join:
           - ""
           - - Fn::GetAtt:
-              - DeviceGroupUsers
+              - DeviceGroupUsersTable
               - Arn
             - "/index/*"
+        - Fn::GetAtt:
+          - DeviceGroupUserFacesTable
+          - Arn
 
 
   # Fn::Join:
@@ -66,9 +88,9 @@ provider:
   #     - ":"
   #     - Ref: AWS::AccountId
   #     - ":table/"
-  #     - Ref: UserDynamoDBTable
+  #     - Ref: UsersTable
 
-# DeviceGroupUsers
+# DeviceGroupUsersTable
 # Properties
 # GlobalSecondaryIndexes
 # IndexName
@@ -319,7 +341,7 @@ resources:
                         - ":"
                         - Ref: AWS::AccountId
                         - ":table/"
-                        - Ref: UserDynamoDBTable
+                        - Ref: UsersTable
                   Condition:
                     "ForAllValues:StringEquals":
                       "dynamodb:LeadingKeys":
@@ -341,10 +363,11 @@ resources:
           # unauthenticated:
           #     'Fn::GetAtt': [ CognitoUnAuthorizedRole, Arn ]
 
-    UserDynamoDBTable:
+    UsersTable:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
       Properties:
-        TableName: ${{self:service}}-${{self:provider.stage}}-users
+        TableName: ${{self:custom.variables.dynamodb.usersTableName}}
         AttributeDefinitions:
           - AttributeName: userId
             AttributeType: S
@@ -355,10 +378,11 @@ resources:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
 
-    DeviceGroup:
+    DeviceGroupTable:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
       Properties:
-        TableName: ${{self:service}}-${{self:provider.stage}}-device-group
+        TableName: ${{self:custom.variables.dynamodb.deviceGroupTableName}}
         AttributeDefinitions:
           - AttributeName: groupId
             AttributeType: S
@@ -370,10 +394,11 @@ resources:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
 
-    DeviceGroupUsers:
+    DeviceGroupUsersTable:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
       Properties:
-        TableName: ${{self:service}}-${{self:provider.stage}}-device-group-users
+        TableName: ${{self:custom.variables.dynamodb.deviceGroupUsersTableName}}
         AttributeDefinitions:
           - AttributeName: groupId
             AttributeType: S
@@ -392,6 +417,39 @@ resources:
           KeySchema:
             - AttributeName: userId
               KeyType: "HASH"
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    DeviceGroupUserFacesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${{self:custom.variables.dynamodb.deviceGroupUserFacesTableName}}
+        AttributeDefinitions:
+          - AttributeName: groupId
+            AttributeType: S
+          - AttributeName: faceId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+          - AttributeName: faceId
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+        - IndexName: groupIdUserIdGSI
+          Projection:
+            ProjectionType: ALL
+          KeySchema:
+            - AttributeName: groupId
+              KeyType: HASH
+            - AttributeName: userId
+              KeyType: RANGE
           ProvisionedThroughput:
             ReadCapacityUnits: 1
             WriteCapacityUnits: 1
@@ -429,7 +487,7 @@ resources:
 #       Properties:
 #         BucketName: ${{self:service}}-${{self:provider.stage}}-uploads
 #
-#     userTable:
+#     usersTable:
 #       Type: AWS::DynamoDB::Table
 #       Properties:
 #         TableName: ${{self:service}}-${{self:provider.stage}}-users

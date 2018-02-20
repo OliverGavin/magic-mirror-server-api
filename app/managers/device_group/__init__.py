@@ -17,5 +17,7 @@ from .device_group_manager import (
     delete_user_in_device_group,
     update_user_in_device_group,
     get_users_in_device_group,
-    add_user_to_device_group
+    add_user_to_device_group,
+    register_user_face_in_device_group,
+    remove_user_face_from_device_group
 )

@@ -4,11 +4,6 @@ from flask import request, jsonify
 from app.api.device_group import device_group_bp
 
 
-import os
-import logging
-logging.error(os.environ['UserPoolId'])
-
-
 app = Flask(__name__)
 app.register_blueprint(device_group_bp, url_prefix='/api')
 
