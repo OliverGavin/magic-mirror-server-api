@@ -5,6 +5,8 @@ from .device_group_manager import (
     DeviceGroupAlreadyExistsException,
     UserNotInDeviceGroupException,
     UserAlreadyInDeviceGroupException,
+    FaceNotInDeviceGroupException,
+    NoFaceInImageException,
     verify_users_used_same_device,
     is_member,
     is_owner,
@@ -19,5 +21,7 @@ from .device_group_manager import (
     get_users_in_device_group,
     add_user_to_device_group,
     register_user_face_in_device_group,
+    auth_user_in_device_group,
+    get_open_id_token,
     remove_user_face_from_device_group
 )

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "env $(cat .env | xargs) sls wsgi serve -p 5001"
+    "serve": "sls export-env && env $(cat .env .env-offline | sed 's/\r$//' | xargs) sls wsgi serve -p 5001"
   },
   "keywords": [],
   "author": "",

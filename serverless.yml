@@ -18,6 +18,8 @@ package:
 
 custom:
   variables:
+    cognito:
+      developerProviderName: 'login.magicmirror.gavin.ie'
     dynamodb:
       usersTableName:
        ${{self:service}}-${{self:provider.stage}}-users
@@ -45,6 +47,10 @@ provider:
   environment:
     USER_POOL_ID:
       Ref: UserPool
+    IDENTITY_POOL_ID:
+      Ref: IdentityPool
+    DEVELOPER_PROVIDER_NAME:
+      ${{self:custom.variables.cognito.developerProviderName}}
     USERS_TABLE:
       ${{self:custom.variables.dynamodb.usersTableName}}
     DEVICE_GROUP_TABLE:
@@ -61,6 +67,7 @@ provider:
        - dynamodb:GetItem
        - dynamodb:BatchGetItem
        - dynamodb:PutItem
+       - dynamodb:BatchWriteItem
        - dynamodb:UpdateItem
        - dynamodb:DeleteItem
       Resource:
@@ -99,6 +106,10 @@ provider:
         # - rekognition:ListFaces
         # - rekognition:SearchFaces
       Resource: "*"  # arn:aws:rekognition:region:account-id:collection/collection-id
+    - Effect: "Allow"
+      Action:
+        - cognito-identity:GetOpenIdTokenForDeveloperIdentity
+      Resource: "*"
 
 
 functions:
@@ -125,16 +136,18 @@ functions:
             allowCredentials: false
           authorizer:
             identitySource: "method.request.header.Authorization"
-            arn: arn:aws:cognito-idp:eu-west-1:834819762693:userpool/eu-west-1_PtJ4NoVML  # TODO when fix available!!! or multi stack :(
-              # https://github.com/serverless/serverless/issues/2240#issuecomment-268411199
-              # https://forum.serverless.com/t/cognito-user-identity-pools-as-serverless-yml-resource-defs/2050/9
-              # https://github.com/serverless/serverless/issues/3212#issuecomment-307341924
-              # https://github.com/serverless/serverless/issues/3212#issuecomment-307341924
-            # providerArn:
-              # Fn::GetAtt:
-              #   - UserPool
-              #   - Arn
-            type: "COGNITO_USER_POOLS"
+            type: aws_iam
+            # identitySource: "method.request.header.Authorization"
+            # arn: arn:aws:cognito-idp:eu-west-1:834819762693:userpool/eu-west-1_PtJ4NoVML  # TODO when fix available!!! or multi stack :(
+            #   # https://github.com/serverless/serverless/issues/2240#issuecomment-268411199
+            #   # https://forum.serverless.com/t/cognito-user-identity-pools-as-serverless-yml-resource-defs/2050/9
+            #   # https://github.com/serverless/serverless/issues/3212#issuecomment-307341924
+            #   # https://github.com/serverless/serverless/issues/3212#issuecomment-307341924
+            # # providerArn:
+            #   # Fn::GetAtt:
+            #   #   - UserPool
+            #   #   - Arn
+            # type: "COGNITO_USER_POOLS"
       - http:
           path: '/'
           method: ANY
@@ -233,15 +246,16 @@ resources:
       Properties:
         IdentityPoolName: ${{self:service}}IdentityPool
         AllowUnauthenticatedIdentities: false
+        DeveloperProviderName: ${{self:custom.variables.cognito.developerProviderName}}
         CognitoIdentityProviders:
           - ClientId:
               Ref: UserPoolClient
             ProviderName:
               'Fn::GetAtt': [ UserPool, ProviderName ]
-        # SupportedLoginProviders:
-        #   'graph.facebook.com': "xxxxxxxxxx"
-        # OpenIdConnectProviderARNs:
-        #   - 'arn:aws:iam::xxxxxxxxxxx:oidc-provider/accounts.google.com'
+        SupportedLoginProviders:
+          'graph.facebook.com': "1634271429961880"
+        OpenIdConnectProviderARNs:
+          - arn:aws:iam::834819762693:oidc-provider/accounts.google.com
 
     # # Create a role for unauthorized acces to AWS resources. Very limited access. Only allows users in the previously created Identity Pool
     # CognitoUnAuthorizedRole:
@@ -298,6 +312,15 @@ resources:
               Statement:
                 - Effect: "Allow"
                   Action:
+                    - "apigateway:*"
+                    - "execute-api:Invoke"
+                  Resource: "*"
+                - Effect: "Allow"
+                  Action:
+                    - "polly:SynthesizeSpeech"
+                  Resource: "*"
+                - Effect: "Allow"
+                  Action:
                     - "mobileanalytics:PutEvents"
                     - "cognito-sync:*"
                     - "cognito-identity:*"
@@ -308,18 +331,22 @@ resources:
                     - "dynamodb:PutItem"
                     - "dynamodb:Query"
                   Resource:
-                    Fn::Join:
-                      - ""
-                      - - "arn:aws:dynamodb:"
-                        - Ref: AWS::Region
-                        - ":"
-                        - Ref: AWS::AccountId
-                        - ":table/"
-                        - Ref: UsersTable
+                    Fn::GetAtt:
+                      - UsersTable
+                      - Arn
+                    # Fn::Join:
+                    #   - ""
+                    #   - - "arn:aws:dynamodb:"
+                    #     - Ref: AWS::Region
+                    #     - ":"
+                    #     - Ref: AWS::AccountId
+                    #     - ":table/"
+                    #     - Ref: UsersTable
                   Condition:
                     "ForAllValues:StringEquals":
                       "dynamodb:LeadingKeys":
                         "${cognito-identity.amazonaws.com:sub}"
+                        # "${aws:userid}"
                 # - Effect: "Allow"
                 #   Action:
                 #     - "lambda:InvokeFunction"
