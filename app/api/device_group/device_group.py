@@ -19,6 +19,8 @@ from app.managers.device_group import (
     get_users_in_device_group,
     add_user_to_device_group,
     register_user_face_in_device_group,
+    auth_user_in_device_group,
+    get_open_id_token,
     remove_user_face_from_device_group
 )
 
@@ -36,6 +38,14 @@ errors = {
         'message': 'A user with that userId is already in a device group with that groupId.',
         'status': 409,
     },
+    'NoFaceInImageException': {
+        'message': 'There are no faces in the image. Should be at least 1.',
+        'status': 404,
+    },
+    'FaceNotInDeviceGroupException': {
+        'message': 'Could not find a user with that face in a device group with that groupId.',
+        'status': 404,
+    },
 }
 
 
@@ -50,7 +60,8 @@ device_group_users_table = dynamodb.Table('MagicMirror-dev-device-group-users')
 
 
 def get_cognito_user_id():
-    return request.environ['API_GATEWAY_AUTHORIZER']['claims']['sub']
+    # return request.environ['API_GATEWAY_AUTHORIZER']['claims']['sub']
+    return request.environ['event']['requestContext']['identity']['cognitoIdentityId']
 
 
 def abort_if_user_not_member_of_group(group_id):
@@ -71,9 +82,10 @@ device_group_fields = {
 }
 
 device_group_user_fields = {
-    'id': fields.String(attribute='userid'),
-    'group_id': fields.String(attribute='groupid'),
-    'owner': fields.String
+    'userId': fields.String(attribute='id'),
+    'groupId': fields.String(attribute='group_id'),
+    'owner': fields.String,
+    'faceNum': fields.Integer(attribute='face_num')
 }
 
 
@@ -129,6 +141,7 @@ api.add_resource(DeviceGroupListApi, '/groups')
 class DeviceGroupUserApi(Resource):
     # Get a user - check permission (also PUT, DELETE)
     # GET /api/groups/:id/users/:id
+    @marshal_with(device_group_user_fields)
     def get(self, group_id, user_id):
         # TODO check permission
         cognito_user_id = get_cognito_user_id()
@@ -162,21 +175,18 @@ class DeviceGroupUserListApi(Resource):
 
     # Add/join user to a group - return new user entry and link
     # POST /api/groups/:id/users
+    @marshal_with(device_group_user_fields)
     def post(self, group_id):
         """Join a group/add a user to a device group
         """
-        # data = request.get_json()
+        data = request.get_json()
         user_id = get_cognito_user_id()
 
-        # TODO test, check if device ids match
-        owners = [user.id for user in get_users_in_device_group(group_id)
-                  if user.owner]
-        for owner in owners:
-            if verify_users_used_same_device(user_id, owner):
-                user = add_user_to_device_group(user_id, group_id, owner=False)
-                return user, 201
+        if user_id != data['userId']:
+            abort(403, 'Not permitted to join this group.')
 
-        abort(403, 'Not permitted to join this group.')
+        user = add_user_to_device_group(user_id, group_id, owner=False)
+        return user, 201
 
 
 api.add_resource(DeviceGroupUserApi, '/groups/<group_id>/users/<user_id>')
@@ -192,7 +202,12 @@ class DeviceGroupUserFacesApi(Resource):
 
         data = request.get_json()
         faces = data['faces']
-        register_user_face_in_device_group(user_id, group_id, faces)
+        provider = data['provider']
+        token = data['token']
+        face_num = register_user_face_in_device_group(user_id, group_id, faces, provider, token)
+        if face_num < 3:
+            abort(403, message='There are no faces in the image. Should be at least 1.')
+        # TODO link account
         return '', 201
 
     def delete(self, group_id, user_id):
@@ -205,3 +220,35 @@ class DeviceGroupUserFacesApi(Resource):
 
 
 api.add_resource(DeviceGroupUserFacesApi, '/groups/<group_id>/users/<user_id>/faces')
+
+
+class DeviceGroupAuthApi(Resource):
+
+    def post(self, group_id):
+        # TODO check if in group??
+        # if user_id != get_cognito_user_id():
+        #     abort(403, message='User does not have permission to make changes to that user.')
+
+        # obtain an identity ID and session token
+
+        data = request.get_json()
+        face = data['face']
+        token, identity_id = auth_user_in_device_group(group_id, face)
+        return {'token': token, 'identityId': identity_id}, 201
+
+
+api.add_resource(DeviceGroupAuthApi, '/groups/<group_id>/auth')
+
+
+class TokenApi(Resource):
+
+    def post(self):
+        data = request.get_json()
+        provider = data['provider']
+        token = data['token']
+        user_id = get_cognito_user_id()
+        token, identity_id = get_open_id_token(user_id, provider, token)
+        return {'token': token, 'identityId': identity_id}
+
+
+api.add_resource(TokenApi, '/openid/token')
