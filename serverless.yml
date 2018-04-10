@@ -29,6 +29,10 @@ custom:
        ${{self:service}}-${{self:provider.stage}}-device-group-users
       deviceGroupUserFacesTableName:
        ${{self:service}}-${{self:provider.stage}}-device-group-user-faces
+      deviceGroupUsersIntegrationsTableName:
+       ${{self:service}}-${{self:provider.stage}}-device-group-user-integrations
+      integrationsTableName:
+       ${{self:service}}-${{self:provider.stage}}-integrations
   wsgi:
     app: app.app.app
     packRequirements: false
@@ -59,6 +63,10 @@ provider:
       ${{self:custom.variables.dynamodb.deviceGroupUsersTableName}}
     DEVICE_GROUP_USER_FACES_TABLE:
       ${{self:custom.variables.dynamodb.deviceGroupUserFacesTableName}}
+    DEVICE_GROUP_USERS_INTEGRATIONS_TABLE:
+     ${{self:service}}-${{self:provider.stage}}-device-group-user-integrations
+    INTEGRATIONS_TABLE:
+     ${{self:service}}-${{self:provider.stage}}-integrations
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -113,6 +121,18 @@ provider:
 
 
 functions:
+  weather:
+    handler: third_party.weather.weather_handler
+  # news:
+  #   handler: todo
+  # stock:
+  #   handler: todo
+  # fitbit:
+  #   handler: todo
+  # timetable:
+  #   handler: todo
+  # clock:
+  #   handler: todo
   app:
     handler: wsgi.handler
     events:
@@ -457,6 +477,43 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+
+    DeviceGroupUsersIntegrationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${{self:custom.variables.dynamodb.deviceGroupUsersIntegrationsTableName}}
+        AttributeDefinitions:
+          - AttributeName: groupId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          # integrationsid, position, size, params
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+          - AttributeName: userId
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    IntegrationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${{self:custom.variables.dynamodb.integrationsTableName}}
+        AttributeDefinitions:
+          - AttributeName: integrationId
+            AttributeType: S
+          # functionName, name
+        KeySchema:
+          - AttributeName: integrationId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
 
   Outputs:
     # UserPoolArn:

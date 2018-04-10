@@ -53,12 +53,6 @@ bp = Blueprint('groups', __name__)
 api = Api(bp, errors=errors)
 
 
-dynamodb = boto3.resource('dynamodb')
-
-device_group_table = dynamodb.Table('MagicMirror-dev-device-group')
-device_group_users_table = dynamodb.Table('MagicMirror-dev-device-group-users')
-
-
 def get_cognito_user_id():
     # return request.environ['API_GATEWAY_AUTHORIZER']['claims']['sub']
     return request.environ['event']['requestContext']['identity']['cognitoIdentityId']
