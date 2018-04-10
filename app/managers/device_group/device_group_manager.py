@@ -1,9 +1,7 @@
 import boto3
 import base64
-import operator
 import os
 import uuid
-import logging
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
@@ -55,31 +53,6 @@ class FaceNotInDeviceGroupException(Exception):
 
 class NoFaceInImageException(Exception):
     pass
-
-
-def get_cognito_user_devices(user_id):
-    user = cognito_idp.list_users(
-        UserPoolId=os.environ['UserPoolId'],
-        Filter=f'sub = "{user_id}"')['Users'][0]
-    response = cognito_idp.admin_list_devices(
-        UserPoolId=os.environ['UserPoolId'], Username=user['Username'])
-    for device in response['Devices']:
-        device['DeviceAttributes'] = {
-            attr['Name']: attr['Value']
-            for attr in device['DeviceAttributes']
-        }
-    return response['Devices'][0]
-
-
-def verify_users_used_same_device(user_id1, user_id2):
-    # TODO: only if remembered by owner??
-    def get_device_keys(id):
-        return map(
-            operator.itemgetter('DeviceKey'), get_cognito_user_devices(id))
-
-    user1_device_keys = get_device_keys(user_id1)
-    user2_device_keys = get_device_keys(user_id2)
-    return bool(set(user1_device_keys) & set(user2_device_keys))
 
 
 def is_member(user_id, group_id):
@@ -405,7 +378,6 @@ def add_user_to_device_group(user_id, group_id, owner=False):
         'groupId': group_id,
         'userId': user_id,
         'groupOwner': owner,
-        # 'token': ''  # or auth service?..
     }
 
     try:
@@ -438,9 +410,6 @@ def register_user_face_in_device_group(user_id, group_id, faces, provider, token
             face_id = response['FaceRecords'][0]['Face']['FaceId']
             face_ids.append(face_id)
 
-        # logging.error('register:')
-        # logging.error(response)
-
     with device_group_user_faces_table.batch_writer() as batch:
         for face_id in face_ids:
             batch.put_item(Item={
@@ -453,17 +422,6 @@ def register_user_face_in_device_group(user_id, group_id, faces, provider, token
 
     return len(face_ids)
 
-    # response = cognito_identity.get_open_id_token_for_developer_identity(
-    #     IdentityPoolId=str(os.environ['IDENTITY_POOL_ID']),
-    #     # IdentityId=user_id,  # instead of token??
-    #     Logins={
-    #         os.environ['DEVELOPER_PROVIDER_NAME']: user_id,
-    #         provider: token
-    #     }
-    # )
-    #
-    # logging.error(response)
-
 
 def get_user_face_ids_in_group(user_id, group_id):
     response = device_group_user_faces_table.query(
@@ -475,10 +433,8 @@ def get_user_face_ids_in_group(user_id, group_id):
 
 def auth_user_in_device_group(group_id, face):
     user_id = search_user_face_in_device_group(group_id, face)
-    # token, identity_id = get_open_id_token(user_id)
     response = cognito_identity.get_open_id_token_for_developer_identity(
         IdentityPoolId=str(os.environ['IDENTITY_POOL_ID']),
-        # IdentityId=user_id,
         Logins={
             os.environ['DEVELOPER_PROVIDER_NAME']: user_id,
         },
@@ -492,12 +448,8 @@ def auth_user_in_device_group(group_id, face):
 
 
 def get_open_id_token(user_id, provider, token):
-    # response = cognito_identity.get_open_id_token(
-    #     IdentityId=f'eu-west-1:...'
-    # )
     response = cognito_identity.get_open_id_token_for_developer_identity(
         IdentityPoolId=str(os.environ['IDENTITY_POOL_ID']),
-        # IdentityId=user_id,
         Logins={
             os.environ['DEVELOPER_PROVIDER_NAME']: user_id,
             provider: token
@@ -525,11 +477,6 @@ def search_user_face_in_device_group(group_id, face):
         else:
             raise
 
-    # logging.error('search:')
-    # logging.error(response)
-
-    # best_confidence = response['SearchedFaceConfidence']  # even if not chosen..
-
     try:
         face_id = response['FaceMatches'][0]['Face']['FaceId']
     except IndexError:
@@ -541,16 +488,10 @@ def search_user_face_in_device_group(group_id, face):
         'faceId': face_id
     })
 
-    # logging.error('DDB:')
-    # logging.error({'groupId': group_id, 'faceId': face_id})
-
     if 'Item' not in response:
         raise FaceNotInDeviceGroupException(
             f"DeviceGroup(id='{group_id}') does not recognise this face.")
     user_id = response['Item']['userId']
-
-    # logging.error('user_id:')
-    # logging.error(user_id)
 
     return user_id
 
@@ -565,5 +506,4 @@ def create_face_collection(group_id):
 
 
 def delete_face_collection(group_id):
-    # DDB
     rekognition.delete_collection(CollectionId=group_id)

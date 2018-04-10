@@ -5,7 +5,6 @@ from flask_restful import Api, Resource, abort, marshal_with, fields
 from app.managers.device_group import (
     DeviceGroup,
     DeviceGroupUser,
-    verify_users_used_same_device,
     is_member,
     is_owner,
     get_device_group,
@@ -54,7 +53,6 @@ api = Api(bp, errors=errors)
 
 
 def get_cognito_user_id():
-    # return request.environ['API_GATEWAY_AUTHORIZER']['claims']['sub']
     return request.environ['event']['requestContext']['identity']['cognitoIdentityId']
 
 
@@ -93,7 +91,6 @@ class DeviceGroupApi(Resource):
         return group
 
     def delete(self, group_id):
-        # TODO delete member list?
         abort_if_user_not_owner_of_group(group_id)
         delete_device_group(group_id)
         return '', 204
@@ -108,7 +105,7 @@ class DeviceGroupApi(Resource):
 
 
 class DeviceGroupListApi(Resource):
-    # Get list of groups - for which user is a member.. or owner???
+    # Get list of groups - for which user is a member
     # GET /api/groups
     @marshal_with(device_group_fields)
     def get(self):
@@ -137,7 +134,6 @@ class DeviceGroupUserApi(Resource):
     # GET /api/groups/:id/users/:id
     @marshal_with(device_group_user_fields)
     def get(self, group_id, user_id):
-        # TODO check permission
         cognito_user_id = get_cognito_user_id()
         if user_id != cognito_user_id and not is_owner(cognito_user_id):
             abort(403, message='User does not have permission to make changes to that user.')
@@ -150,13 +146,6 @@ class DeviceGroupUserApi(Resource):
             abort(403, message='User does not have permission to make changes to that user.')
         delete_user_in_device_group(user_id, group_id)
         return '', 204
-
-    # def put(self, group_id):
-    #     # TODO check permission
-    #     data = request.get_json()
-    #     user = DeviceGroupUser(data['userid'], data['groupid'])
-    #     update_user_in_device_group(user)
-    #     return user, 201
 
 
 class DeviceGroupUserListApi(Resource):
@@ -190,10 +179,6 @@ api.add_resource(DeviceGroupUserListApi, '/groups/<group_id>/users')
 class DeviceGroupUserFacesApi(Resource):
 
     def post(self, group_id, user_id):
-        # TODO check if in group??
-        # if user_id != get_cognito_user_id():
-        #     abort(403, message='User does not have permission to make changes to that user.')
-
         data = request.get_json()
         faces = data['faces']
         provider = data['provider']
@@ -201,7 +186,6 @@ class DeviceGroupUserFacesApi(Resource):
         face_num = register_user_face_in_device_group(user_id, group_id, faces, provider, token)
         if face_num < 3:
             abort(403, message='There are no faces in the image. Should be at least 1.')
-        # TODO link account
         return '', 201
 
     def delete(self, group_id, user_id):
@@ -219,12 +203,6 @@ api.add_resource(DeviceGroupUserFacesApi, '/groups/<group_id>/users/<user_id>/fa
 class DeviceGroupAuthApi(Resource):
 
     def post(self, group_id):
-        # TODO check if in group??
-        # if user_id != get_cognito_user_id():
-        #     abort(403, message='User does not have permission to make changes to that user.')
-
-        # obtain an identity ID and session token
-
         data = request.get_json()
         face = data['face']
         token, identity_id = auth_user_in_device_group(group_id, face)
@@ -232,17 +210,3 @@ class DeviceGroupAuthApi(Resource):
 
 
 api.add_resource(DeviceGroupAuthApi, '/groups/<group_id>/auth')
-
-
-class TokenApi(Resource):
-
-    def post(self):
-        data = request.get_json()
-        provider = data['provider']
-        token = data['token']
-        user_id = get_cognito_user_id()
-        token, identity_id = get_open_id_token(user_id, provider, token)
-        return {'token': token, 'identityId': identity_id}
-
-
-api.add_resource(TokenApi, '/openid/token')

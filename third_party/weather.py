@@ -1,3 +1,6 @@
+# simple example lambda script that could be used for third party integration
+
+
 def weather_handler(event, env):
     context = event['context']
 

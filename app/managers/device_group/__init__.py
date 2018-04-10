@@ -7,7 +7,6 @@ from .device_group_manager import (
     UserAlreadyInDeviceGroupException,
     FaceNotInDeviceGroupException,
     NoFaceInImageException,
-    verify_users_used_same_device,
     is_member,
     is_owner,
     get_device_group,
